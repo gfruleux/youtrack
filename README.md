@@ -10,6 +10,7 @@
 The script can be used with a formatted file, or by feeding the command line.
 
 Whichever method you chose, the format the __must__ be respected is the following:
+
 * Line: ``<Ticket Name> <Time Spent> <Date> <Text>``
 * Time: `:h:m`
 * Date: `yyyy-mm-dd`
