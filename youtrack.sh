@@ -96,7 +96,6 @@ function work_from_cmd_line() {
 #################### Execute the prepared work
 function execute_work() {
   work_item_post "$(work_item_payload)"
-  _work_item_delete
 }
 
 #################### Initialize Issue vars by parsing arguments
