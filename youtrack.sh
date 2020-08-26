@@ -4,6 +4,8 @@
 ERR_MISSING_API_TOKEN=1
 ERR_MISSING_API_URL=2
 ERR_MISSING_API_USERNAME=3
+ERR_MISSING_JQ=4
+ERR_MISSING_CURL=5
 
 ERR_MISSING_PAYLOAD=10
 ######################################## ENVIRONMENT ###########################################
@@ -278,6 +280,14 @@ function main() {
   log "${POSTED[*]}"
 }
 
+if ! command -v jq &> /dev/null ; then
+  log "You must have jq installed"
+  exit $ERR_MISSING_JQ
+fi
+if ! command -v curl &> /dev/null ; then
+  log "You must have curl installed"
+  exit $ERR_MISSING_CURL
+fi
 if [[ -z "$YT_API_TOKEN" ]]; then
   log "You must define the env var YT_API_TOKEN"
   exit $ERR_MISSING_API_TOKEN
