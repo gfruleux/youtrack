@@ -1,5 +1,10 @@
 # Script to add new Spent Time into YouTrack 
 
+### PreRequisites
+You need to have the following commands installed:
+* [CURL](https://curl.haxx.se/) Transfert Data 
+* [JQ](https://stedolan.github.io/jq/) a JSON Processor
+
 ### Configuration
 1. You need a YouTrack API Token ([how to get one](https://www.jetbrains.com/help/youtrack/standalone/Manage-Permanent-Token.html#obtain-permanent-token))
 2. Setup an environment variable called `YT_API_TOKEN` with your YouTrack API Token _(ex: `perm:dAIdindN=.9AnQ`)_
