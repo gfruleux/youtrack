@@ -303,23 +303,6 @@ fi
 
 main "$@"
 
-###################################### Old / Unused
-########## [Payload] Only Date
-function _payload_date() {
-  echo "{\"date\": $WORK_ITEM_TIMESTAMP}"
-}
-########## Print a WorkItem
-function _print_work_item() {
-  local query
-  query="$API_WORK_ITEMS/$1?$API_WORK_ITEM_FIELDS"
-  log "$(curl -X GET -H "$AUTH" "$query" -s)"
-}
-#################### [DELETE] Delete the WorkItem using $WORK_ITEM_URL
-function _work_item_delete() {
-  log "DELETE WorkItem at $WORK_ITEM_URL"
-  curl -X DELETE -H "$AUTH" "$WORK_ITEM_URL" -s
-}
-
 ####### WorkItem Payload
 #{
 #    usesMarkdown: true,
