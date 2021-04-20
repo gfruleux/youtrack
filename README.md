@@ -15,23 +15,51 @@ You need to have the following commands installed:
 
 --------------------------------------------------
 
+### Note
+* A `project` is compose of a **name**, and **id** and a **short name**
+    * ex: Project named `Youtrack Globals` shorted to `YTG`, with id `0-1`
+    
+    
+* An `issue name`, also called `id readable`, is a jointure of its project's **short name** and an ID
+    * ex: First issue from project `Youtrack Globals` would be `YTG-1`
+
+* Issue types must match their projects types. You can use the `-T <Project>` option to list the available types for a project.
+
 ### Usage
 The script can be used with a formatted file, or by feeding the command line.
 
 Whichever method you chose, the format the __must__ follow its respective guideline:
 
 ##### From Command Line
-* Line: `<Ticket Name> <Time Spent> <Date> <Text>` To log work
-    * Time Spent format: `:h:m`
-    * Date format: `yyyy-mm-dd`
-    * Text format: _Markdown supported_
+* Line: `<Issue Name> <Time Spent> <Date> [Type] [Text]`
+    * **Issue Name**
+        * Required
+    * **Time Spent**
+        * Required
+        * Format: `:h:m`
+    * **Date**
+        * Required
+        * Format: `yyyy-mm-dd`
+    * **Type**
+        * Optional
+    * **Text** 
+        * Optional
 
 ##### From a File
-* Line: `<Ticket Name> <Time Spent> <Text>` To log work
-    * Time Spent format: `:h:m`
-    * Text format: _Markdown supported_
 * Line: `#setdate <Date>` **To set the date of the following lines**
     * Date format: `yyyy-mm-dd`
+    
+    
+* Line: `<Issue Name> <Time Spent> [Type] [Text]`
+    * **Issue Name**
+        * Required
+    * **Time Spent**
+        * Required
+        * Format: `:h:m`
+    * **Type**
+        * Optional
+    * **Text**
+        * Optional
 
 --------------------------------------------------
 
@@ -40,21 +68,34 @@ Whichever method you chose, the format the __must__ follow its respective guidel
 To log spent time of ...
 * 5 hours and 30 minutes
 * the 01/01/2020
-* on the issue TKT-1
-* with the comments `Spent time working on the Script`
+* on the issue YouTrack Globals `YTG-1`
+    * (optional) with type `Daily Meeting`
+    * (optional) with the comments `New script meeting !`
 
 ##### From Command Line
-You would need to run this command: 
+Bellow are some exemples varying the optional parameters 
 
-`./youtrack.sh TKT-1 5h30m 2020-01-01 Spent time working on the Script`
+| Desired work log | Command to run |
+--- | ---
+| Only the date and duration | `./youtrack.sh YTG-1 5h30m 2020-01-01` |
+| With type | `./youtrack.sh YTG-1 5h30m 2020-01-01 "Daily Meeting"` |
+| Without type but comments<br/>**Safe method** | `./youtrack.sh YTG-1 5h30m 2020-01-01 "" "New script meeting !"` |
+| Without type but comments<br/>**Start of the comments might be interpreted as Type** | `./youtrack.sh YTG-1 5h30m 2020-01-01 "New script meeting !"` |
+| With type and comments | `./youtrack.sh YTG-1 5h30m 2020-01-01 "Daily Meeting" "New script meeting !"` |
+
 
 ##### From File feed
-The file should be built as bellow:
-```
-#setdate 2020-01-01
-TKT-1 5h30m Spent time working on the Script
-```
+* The command line to run for the file is pretty straight forward
+`./youtrack.sh /path/to/file`
+* The `#setdate <Date>` line is not impact by the optional parameters
 
-You would need to run this command 
+The file would be composed of date setters follow by work-load for that date
+`#setdate 2020-01-01` with one of the line bellow
 
-`./youtrack.sh /path/to/time/tracking/file`
+| Desired work log | File line format |
+--- | ---
+| Only the date and duration | `YTG-1 5h30m` |
+| With type | `YTG-1 5h30m "Daily Meeting"` |
+| Without type but comments<br>**Safe method** | `YTG-1 5h30m "" "New script meeting !"` |
+| Without type but comments<br>**Start of the comments might be interpreted as Type** | `YTG-1 5h30m "New script meeting !"` |
+| With type and comments | `YTG-1 5h30m "Daily Meeting" "New script meeting !"` |

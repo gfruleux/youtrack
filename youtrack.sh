@@ -62,23 +62,20 @@ WORK_ITEM_DURATION=
 WORK_ITEM_TIMESTAMP=
 WORK_ITEM_TEXT=
 WORK_ITEM_TYPE=
+WORK_ITEM_TYPE_RAW=
 WORK_ITEM_URL=
 WORK_ITEM_PAYLOAD=
 
-SCRIPT_WORK=
-SCRIPT_WORK_CMD=1
-
 declare -a POSTED_WORK_ITEM_ID_LIST
-declare -A WORK_ITEM_TYPES=(["Key"]="WorkItemTypeID")
+
+## Set Internal Field Separator
+IFS=" "
 
 ## Create an IO to use stdout with functions
 exec 3>&1
 function log() {
   printf "%s\n" "$1" 1>&3
 }
-
-## Set Internal Field Separator
-IFS=" "
 
 #################################################
 # Functions available through command line args #
@@ -113,7 +110,7 @@ function search_project_work_item_types() {
 ## Function to build the SpendTime
 #### Read a file line by line, with its fields delimited by a Space
 #### If a line starts by #
-######## If directly followed by setdate, the script will update its WORK_ITEM_DATE
+######## Directly followed by setdate <Date>, the script will update its WORK_ITEM_DATE
 ######## Otherwise, the line will be discard as a comment
 function work_from_file() {
   while read -r line; do
@@ -129,19 +126,16 @@ function work_from_file() {
       fi
       continue
     fi
-    unset SCRIPT_WORK
-    line_to_issue "$line"
+    eval "args_to_issue $line"
     execute_work
 
-    log ""
   done <"$1"
 }
 #
 ## Function to build the SpendTime
 #### Read the args from the command line
 function work_from_cmd_line() {
-  SCRIPT_WORK=${SCRIPT_WORK_CMD}
-  line_to_issue "$*"
+  args_to_issue "$@"
   execute_work
 }
 #
@@ -151,15 +145,17 @@ function work_from_cmd_line() {
 function execute_work() {
   set_work_item_payload
   post_work
+  # reset vars
+  unset ISSUE_NAME ISSUE_ID ISSUE_URL
+  unset WORK_ITEM_DURATION WORK_ITEM_TIMESTAMP WORK_ITEM_TYPE_RAW WORK_ITEM_TYPE WORK_ITEM_TEXT WORK_ITEM_PAYLOAD
 }
 #
 ## Function to submit the work
 function post_work() {
-  if [ -n "$WORK_ITEM_PAYLOAD" ]; then
-    log "post_work should receive the payload."
+  if [ -z "$WORK_ITEM_PAYLOAD" ]; then
+    log "post_work need a payload."
     exit $ERR_MISSING_PAYLOAD
   fi
-  log "POSTing WorkItem . . ."
 
   local tracking_query work_item_id
 
@@ -175,44 +171,32 @@ function post_work() {
 # Script functions #
 ####################
 #
-## Parse the work line and fill vars
-function line_to_issue() {
-  local line_split delete_array text_array duration
+## Parse the args and fill vars
+function args_to_issue() {
+  local duration
+  log "Parsing $*"
 
-  log "Parsing $1"
+  ISSUE_NAME="$1" && shift
+  set_issue_id
+  set_issue_url
 
-  read -ra line_split <<<"$1"
-
-  ISSUE_NAME=${line_split[0]}                                 # Retrieve readable ISSUE_ID
-  ISSUE_ID=$(search_issue "$ISSUE_NAME" | jq -c -r ".[0].id") # Retrieve real ISSUE_ID
-  ISSUE_URL="$API_ISSUES/$ISSUE_ID"                           # Build ISSUE_URL base on real ISSUE_ID
-
-  duration=${line_split[1]}
+  duration="$1" && shift
   set_work_item_duration "$duration"
-
-  # Date field only from Command Line
-  if [[ $SCRIPT_WORK -eq $SCRIPT_WORK_CMD ]]; then
-    WORK_ITEM_DATE=${line_split[2]}
+  if [[ -z $WORK_ITEM_DATE ]]; then
+    WORK_ITEM_DATE="$1" && shift
   fi
-  WORK_ITEM_TIMESTAMP=$(($(date -d "$WORK_ITEM_DATE" "+%s") * 1000))
+  set_work_item_timestamp
 
-  # Keep text by removing the previous data
-  delete_array=("$ISSUE_NAME" "$duration" "$WORK_ITEM_DATE")
-  text_array=("${line_split[@]}")
-  for del in ${delete_array[*]}; do
-    text_array=("${text_array[@]/$del/}")
-  done
-  WORK_ITEM_TEXT=$(echo "${text_array[*]}" | sed -e 's/^[[:space:]]*//') # join array and trim
-
+  WORK_ITEM_TYPE_RAW="$1"
   set_work_item_type
 
-  log "Read entry $ISSUE_NAME, spent $duration (${WORK_ITEM_DURATION}m) on the $WORK_ITEM_DATE ($WORK_ITEM_TIMESTAMP) || Matched real ID $ISSUE_ID"
-}
-#
-## Set the WORK_ITEM_TYPE matching the Project WorkItemTypes
-#### Use NULL to unset the type
-function set_work_item_type() {
-  unset WORK_ITEM_TYPE # null
+  if [[ -n "$WORK_ITEM_TYPE" ]]; then
+    shift
+  fi
+
+  if [[ -n "$*" ]]; then
+    WORK_ITEM_TEXT="$*"
+  fi
 }
 #
 ## Retrieve the USER_ID linked to the Username defined in YT_API_USERNAME
@@ -220,6 +204,41 @@ function set_user_id() {
   local query
   query="$API_USERS_QUERY$USER_LOGIN"
   USER_ID=$(curl -X GET -H "$AUTH" "$query" -s | jq -r ".[0].id")
+}
+#
+## Set the ISSUE_ID by executing search_issue with ISSUE_NAME
+function set_issue_id() {
+  ISSUE_ID=$(search_issue "$ISSUE_NAME" | jq -c -r ".[0].id")
+}
+#
+## Set the ISSUE_URL to "$API_ISSUES/$ISSUE_ID"
+function set_issue_url() {
+  ISSUE_URL="$API_ISSUES/$ISSUE_ID"
+}
+#
+## Set the WORK_ITEM_TIMESTAMP
+function set_work_item_timestamp() {
+  WORK_ITEM_TIMESTAMP=$(($(date -d "$WORK_ITEM_DATE" "+%s") * 1000))
+}
+#
+## Set the WORK_ITEM_TYPE matching the Project WorkItemTypes
+#### Use NULL to unset the type
+function set_work_item_type() {
+  local issue_split
+  unset WORK_ITEM_TYPE
+  shopt -s nocasematch
+  IFS='-'
+  read -ra issue_split <<<"$ISSUE_NAME"
+  IFS="
+"
+  for obj in $(search_project_work_item_types "${issue_split[0]}" | jq -r -c '.[]'); do
+    if [[ $(echo "$obj" | jq -c -r ".name") == "$WORK_ITEM_TYPE_RAW" ]]; then
+      WORK_ITEM_TYPE=$(echo "${obj}" | jq -c -r ".id")
+      break
+    fi
+  done
+  IFS=" "
+  shopt -u nocasematch
 }
 #
 ## Transform :h:m duration into minutes
@@ -280,30 +299,36 @@ function set_work_item_payload() {
 }
 
 function usage() {
-  log "Usage: $0 <IssueName> <Time> <Date> [Text] | <path> | [-h] [-I IssueName] [-P ProjectName] [-T ProjectName]
+  log "Usage: $0 <IssueName> <Time> <Date> [Type] [Text] | <path> | [-h] [-I IssueName] [-P ProjectName] [-T ProjectName]
 Where:
   -h          Show this help
   -I          Search for an Issue to get its information
   -P          Search for a Project to get its information
   -T          Search for a Project to get its time tracking WorkItem Types
 
-  Used by command line, the script expects the following arguments:
-    IssueName   YouTrack idReadable name of the issue (Should be the last path of the Issue's URL)
-    Time        Spent time on the issue, on the format of XhYm
-    Date        The date of the time spent, on the format yyyy-mm-dd
-    [Text]      Optional parameter, the text you want the spent time to be accompanied with
 
+  Used by command line, the script expects the following arguments:
+    IssueName   Required  YouTrack idReadable name of the issue
+    Time        Required  Spent time on the issue, on the format of XhYm
+    Date        Required  The date of the time spent, on the format yyyy-mm-dd
+    [Type]      Optional  Type of work to log. See -T option to get the full name of the wanted type
+                          If the Type contains spaces, it must be encapsulated by quotes
+    [Text]      Optional  Comments to be added to the logged work item
+                          If the Comments contains spaces, it must be encapsulated by quotes
 
 
   To upload several spend time at once, you can feed the script with a path to a file:
     path        Path to the spent time to parse and upload
 
   As the file allows to upload lot of work, the date is managed differently and thus the format of the file differs from the command line args:
-    IssueName   YouTrack idReadable name of the issue (Should be the last parameter of the Issue's URL)
-    Time        Spent time on the issue, on the format of XhYm
-    [Text]      Optional parameter, the text you want the spent time to be accompanied with
+    IssueName   Required  YouTrack idReadable name of the issue
+    Time        Required  Spent time on the issue, on the format of XhYm
+    [Type]      Optional  Type of work to log. See -T option to get the full name of the wanted type
+                          If the Type contains spaces, it must be encapsulated by quotes
+    [Text]      Optional  Comments to be added to the logged work item
+                          If the Comments contains spaces, it must be encapsulated by quotes
 
-  You must use a specific comment-function to set the dates, which will be effective for lines bellow it.
+  You must use a specific comment-function to set the dates, which will be effective for lines bellow it
     #setdate <Date>
   Other lines starting with # will be discard as comments."
   exit 0
