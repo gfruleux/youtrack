@@ -14,11 +14,11 @@ ERR_MISSING_CURL=5
 
 ERR_MISSING_PAYLOAD=10
 
-if ! command -v jq &> /dev/null ; then
+if ! command -v jq &>/dev/null; then
   log "You must have jq installed"
   exit $ERR_MISSING_JQ
 fi
-if ! command -v curl &> /dev/null ; then
+if ! command -v curl &>/dev/null; then
   log "You must have curl installed"
   exit $ERR_MISSING_CURL
 fi
@@ -65,8 +65,11 @@ WORK_ITEM_TYPE=
 WORK_ITEM_URL=
 WORK_ITEM_PAYLOAD=
 
+SCRIPT_WORK=
+SCRIPT_WORK_CMD=1
+
 declare -a POSTED_WORK_ITEM_ID_LIST
-declare -A WORK_ITEM_TYPES=( ["Key"]="WorkItemTypeID")
+declare -A WORK_ITEM_TYPES=(["Key"]="WorkItemTypeID")
 
 ## Create an IO to use stdout with functions
 exec 3>&1
@@ -109,6 +112,9 @@ function search_project_work_item_types() {
 #
 ## Function to build the SpendTime
 #### Read a file line by line, with its fields delimited by a Space
+#### If a line starts by #
+######## If directly followed by setdate, the script will update its WORK_ITEM_DATE
+######## Otherwise, the line will be discard as a comment
 function work_from_file() {
   while read -r line; do
     line="${line//ir/ri}"
@@ -116,10 +122,14 @@ function work_from_file() {
       continue
     fi
     if [[ "$line" =~ ^#.* ]]; then
-      log "$line"
+      if [[ "$line" =~ "#setdate" ]]; then
+        local line_split
+        read -ra line_split <<<"$line"
+        WORK_ITEM_DATE=${line_split[1]}
+      fi
       continue
     fi
-
+    unset SCRIPT_WORK
     line_to_issue "$line"
     execute_work
 
@@ -130,6 +140,7 @@ function work_from_file() {
 ## Function to build the SpendTime
 #### Read the args from the command line
 function work_from_cmd_line() {
+  SCRIPT_WORK=${SCRIPT_WORK_CMD}
   line_to_issue "$*"
   execute_work
 }
@@ -172,13 +183,17 @@ function line_to_issue() {
 
   read -ra line_split <<<"$1"
 
-  ISSUE_NAME=${line_split[0]}                                  # Retrieve readable ISSUE_ID
-  ISSUE_ID=$(search_issue "$ISSUE_NAME" | jq -c -r ".[0].id")  # Retrieve real ISSUE_ID
-  ISSUE_URL="$API_ISSUES/$ISSUE_ID"                                   # Build ISSUE_URL base on real ISSUE_ID
+  ISSUE_NAME=${line_split[0]}                                 # Retrieve readable ISSUE_ID
+  ISSUE_ID=$(search_issue "$ISSUE_NAME" | jq -c -r ".[0].id") # Retrieve real ISSUE_ID
+  ISSUE_URL="$API_ISSUES/$ISSUE_ID"                           # Build ISSUE_URL base on real ISSUE_ID
 
-  duration=${line_split[1]}                                           # Build duration
+  duration=${line_split[1]}
   set_work_item_duration "$duration"
-  WORK_ITEM_DATE=${line_split[2]}
+
+  # Date field only from Command Line
+  if [[ $SCRIPT_WORK -eq $SCRIPT_WORK_CMD ]]; then
+    WORK_ITEM_DATE=${line_split[2]}
+  fi
   WORK_ITEM_TIMESTAMP=$(($(date -d "$WORK_ITEM_DATE" "+%s") * 1000))
 
   # Keep text by removing the previous data
@@ -265,24 +280,32 @@ function set_work_item_payload() {
 }
 
 function usage() {
-  log "Usage: $0 <path> | <IssueName> <Time> <Date> [Text] | [-h] [-I IssueName] [-P ProjectName] [-T ProjectName]
+  log "Usage: $0 <IssueName> <Time> <Date> [Text] | <path> | [-h] [-I IssueName] [-P ProjectName] [-T ProjectName]
 Where:
   -h          Show this help
   -I          Search for an Issue to get its information
   -P          Search for a Project to get its information
   -T          Search for a Project to get its time tracking WorkItem Types
 
-    To upload spent time you can either provide a path
-  path        Path to the spent time to parse and upload
+  Used by command line, the script expects the following arguments:
+    IssueName   YouTrack idReadable name of the issue (Should be the last path of the Issue's URL)
+    Time        Spent time on the issue, on the format of XhYm
+    Date        The date of the time spent, on the format yyyy-mm-dd
+    [Text]      Optional parameter, the text you want the spent time to be accompanied with
 
-    or you can provide the following parameters
-  IssueName   YouTrack idReadable name of the issue (Should be the last parameter of the URL of the issue)
-  Time        Spent time on the issue, on the format of XhYm
-  Date        The date of the time spent, on the format yyyy-mm-dd
-  [Text]      Optional parameter, the text you want the spent time to be accompanied with
 
-  Notice: The file provided should follow the same pattern as the <IssueName> <Time> <Date> [Text].
-  Lines starting with # will only be logged as comments, not parsed to upload."
+
+  To upload several spend time at once, you can feed the script with a path to a file:
+    path        Path to the spent time to parse and upload
+
+  As the file allows to upload lot of work, the date is managed differently and thus the format of the file differs from the command line args:
+    IssueName   YouTrack idReadable name of the issue (Should be the last parameter of the Issue's URL)
+    Time        Spent time on the issue, on the format of XhYm
+    [Text]      Optional parameter, the text you want the spent time to be accompanied with
+
+  You must use a specific comment-function to set the dates, which will be effective for lines bellow it.
+    #setdate <Date>
+  Other lines starting with # will be discard as comments."
   exit 0
 }
 
