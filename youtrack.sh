@@ -252,7 +252,7 @@ function set_work_item_duration() {
       if [[ -z $accu ]]; then
         accu=$char
       else
-        accu=$((accu * 10))
+        accu=$((accu * 10 + char))
       fi
     else
       case "$char" in
