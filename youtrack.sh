@@ -5,6 +5,12 @@
 #YT_API_URL=
 #YT_API_USERNAME=
 
+## Create an IO to use stdout with functions
+exec 3>&1
+function log() {
+  printf "%s\n" "$1" 1>&3
+}
+
 ######################################## ERR Exit codes ########################################
 ERR_MISSING_API_TOKEN=1
 ERR_MISSING_API_URL=2
@@ -70,12 +76,6 @@ declare -a POSTED_WORK_ITEM_ID_LIST
 
 ## Set Internal Field Separator
 IFS=" "
-
-## Create an IO to use stdout with functions
-exec 3>&1
-function log() {
-  printf "%s\n" "$1" 1>&3
-}
 
 #################################################
 # Functions available through command line args #
